@@ -2,6 +2,48 @@ package lcm
 
 import scala.collection.mutable.ArrayBuffer
 import LCMOps.*
+import mainargs.{main, arg, Flag}
+
+object LCM {
+
+  @main
+  def run(
+      @arg(name = "mode", doc = "Mining mode: C (Closed), F (Frequent), or M (Maximal)")
+      modeStr: String,
+      
+      @arg(name = "input", doc = "Path to the input transactional dataset file")
+      inputFile: String,
+      
+      @arg(name = "support", doc = "Minimum support threshold count")
+      support: Int,
+      
+      @arg(name = "output", doc = "Optional path to write output itemsets")
+      outputFile: Option[String] = None,
+
+      @arg(name = "verbose", doc = "Enable verbose logging")
+      verbose: Flag = Flag()
+  ): Unit = {
+    val problem = modeStr.toUpperCase match {
+      case "C" | "CLOSED"  => LCMProblem.Closed
+      case "F" | "FREQ"    => LCMProblem.FreqSet
+      case "M" | "MAXIMAL" => LCMProblem.Maximal
+      case other           => throw new IllegalArgumentException(s"Unknown mode: $other. Use C, F, or M.")
+    }
+
+    val settings = Settings(
+      problem = problem,
+      minSup = support,
+      outputPath = outputFile,
+      verbose = verbose.value
+    )
+
+    val miner = new LCMMiner(settings)
+    miner.run(inputFile)
+  }
+
+  // Automatically wires up the mainargs parser to the @main annotation above
+  def main(args: Array[String]): Unit = mainargs.ParserForMethods(this).runOrExit(args)
+}
 
 class LCMMiner(settings: Settings) extends LCMBase(settings) {
 
@@ -16,6 +58,32 @@ class LCMMiner(settings: Settings) extends LCMBase(settings) {
 
     if (settings.verbose) {
       println(s"shrinked database: #transactions=${rootTrsact.length}, #item=$lcmEend #elements=$totalElements")
+    }
+
+    initBuffers()
+
+    try {
+      settings.problem match {
+        case LCMProblem.Closed  => runClosed()
+        case LCMProblem.FreqSet => runFreq()
+        case LCMProblem.Maximal => runMaximal()
+      }
+      outputSummary()
+    } finally {
+      outWriter.foreach(_.close())
+    }
+  }
+
+  def run(transactions: Vector[Array[Int]]): Unit = {
+    val totalElements = loadTransactions(transactions)
+    if (rootTrsact.isEmpty || lcmEend == 0) {
+      if (settings.verbose) println("there is no frequent itemset")
+      outputSummary()
+      return
+    }
+
+    if (settings.verbose) {
+      println(s"shrinked database: #transactions=${rootTrsact.length}, #item=$lcmEend, #elements=$totalElements")
     }
 
     initBuffers()
@@ -345,34 +413,5 @@ class LCMMiner(settings: Settings) extends LCMBase(settings) {
 
     trimItemsetTo(savedStackSize)
     -1
-  }
-}
-
-object LCM {
-  def main(args: Array[String]): Unit = {
-    if (args.length < 2) {
-      println("LCM: [C|F|M] input-filename support [output-filename]")
-      sys.exit(1)
-    }
-
-    val (mode, offset) = args(0).toUpperCase match {
-      case "C" | "CLOSED"  => (LCMProblem.Closed, 1)
-      case "F" | "FREQ"    => (LCMProblem.FreqSet, 1)
-      case "M" | "MAXIMAL" => (LCMProblem.Maximal, 1)
-      case _               => (LCMProblem.Closed, 0)
-    }
-
-    if (args.length < offset + 2) {
-      println("LCM: [C|F|M] input-filename support [output-filename]")
-      sys.exit(1)
-    }
-
-    val inputFile  = args(offset)
-    val support    = args(offset + 1).toInt
-    val outputFile = if (args.length > offset + 2) Some(args(offset + 2)) else None
-
-    val settings = Settings(mode, support, outputFile, verbose = false)
-    val miner = new LCMMiner(settings)
-    miner.run(inputFile)
   }
 }

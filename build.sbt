@@ -9,6 +9,7 @@ lazy val root = project
     scalaVersion := scala3Version,
 
     libraryDependencies += "org.scalameta" %% "munit" % "1.3.6" % Test,
+    libraryDependencies += "com.lihaoyi" %% "mainargs" % "0.5.4",
 
     Compile / mainClass := Some("lcm.LCM"),
     assembly / assemblyJarName := "scalcm.jar"

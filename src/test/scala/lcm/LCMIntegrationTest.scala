@@ -4,6 +4,37 @@ import munit.FunSuite
 import java.nio.file.{Files, StandardCopyOption}
 
 class LCMIntegrationTest extends FunSuite {
+  test("loadTransactions should correctly parse dataset, apply minSup filter, and build internal transaction structures") {
+    val outputPath = "/tmp/test.txt"
+    val settings = Settings(
+      problem = LCMProblem.Closed,
+      minSup = 2,
+      outputPath = Some(outputPath),
+      verbose = true
+    )
+
+    // Instantiate the miner for Closed itemsets with support = 2
+    val lcm = new LCMMiner(settings)
+
+    // Loading dummy transactions...
+    val transactions: Vector[Array[Int]] = Vector(
+      Array(1, 2, 3, 4),
+        Array(1, 2, 4),
+        Array(2, 3, 4, 5),
+        Array(2, 4, 5),   
+        Array(1, 3, 5)
+    )
+    lcm.run(transactions)
+
+    // Assertions
+    val outPathObj = java.nio.file.Paths.get(outputPath)
+    assert(Files.exists(outPathObj), "Output file should be created by the miner")
+      
+    val fileLines = Files.readAllLines(outPathObj)
+    assert(!fileLines.isEmpty, "Output file should contain discovered itemsets")
+      
+    assert(fileLines.size() == 10, "Output file finds the correct number of itemsets")
+  }
 
   test("LCMMiner runs successfully on T10I4D100K dataset with min_support = 200") {
     val resourceStream = getClass.getClassLoader.getResourceAsStream("T10I4D100K.dat")
@@ -46,5 +77,4 @@ class LCMIntegrationTest extends FunSuite {
       assert(fileLines.size() == 13108, "Output file finds the correct number of itemsets")
     }
   }
-
 }
