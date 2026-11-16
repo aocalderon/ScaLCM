@@ -22,13 +22,16 @@ class LCMIntegrationTest extends FunSuite {
       // Clean up previous output if it exists
       Files.deleteIfExists(java.nio.file.Paths.get(outputPath))
 
-      // Instantiate the miner for Closed itemsets with support = 200
-      val miner = new LCMMiner(
+      // Instantiate using the new Settings case class
+      val settings = Settings(
         problem = LCMProblem.Closed,
         minSup = 200,
         outputPath = Some(outputPath),
         verbose = true
       )
+
+      // Instantiate the miner for Closed itemsets with support = 200
+      val miner = new LCMMiner(settings)
 
       // Execute the mining run
       miner.run(inputPath)

@@ -11,6 +11,16 @@ enum LCMProblem:
   case FreqSet, Closed, Maximal
 
 /**
+ * Immutable configuration case class for the LCM miner.
+ */
+case class Settings(
+    problem: LCMProblem,
+    minSup: Int,
+    outputPath: Option[String] = None,
+    verbose: Boolean = false
+)
+
+/**
  * Represents a transaction (QUEUE struct in C), storing sorted frequent item IDs
  * and transaction multiplicity (`end` in Uno's QUEUE struct).
  */
@@ -227,12 +237,7 @@ object LCMOps {
 /**
  * Base class managing buffers, database loading, frequency counting, and output I/O.
  */
-abstract class LCMBase(
-    val problem: LCMProblem,
-    val minSup: Int,
-    val outputPath: Option[String],
-    val verbose: Boolean
-) {
+abstract class LCMBase(val settings: Settings) {
   import LCMOps.*
 
   protected var lcmEend: Int = 0
@@ -310,14 +315,14 @@ abstract class LCMBase(
     }
 
     lcmTrsactNum = rows
-    if (verbose) {
+    if (settings.verbose) {
       println(s"database: #transactions=$lcmTrsactNum, #item=${maxItemSeen + 1} #elements=$rawElements")
     }
 
     val freqItemsBuf = new ArrayBuffer[(Int, Int)]()
     var itemIdx = 0
     while (itemIdx <= maxItemSeen) {
-      if (counts(itemIdx) >= minSup) {
+      if (counts(itemIdx) >= settings.minSup) {
         freqItemsBuf += ((itemIdx, counts(itemIdx)))
       }
       itemIdx += 1
@@ -390,7 +395,7 @@ abstract class LCMBase(
     lcmSc      = new Array[Long](lcmEend + 1)
     activeMask = new Array[Boolean](lcmEend)
 
-    outputPath.foreach { path =>
+    settings.outputPath.foreach { path =>
       outWriter = Some(new PrintWriter(new BufferedWriter(new FileWriter(path), 65536)))
     }
 
@@ -488,7 +493,7 @@ abstract class LCMBase(
   }
 
   protected def outputSummary(): Unit = {
-    if (problem != LCMProblem.Maximal && lcmSc(0) == 0) {
+    if (settings.problem != LCMProblem.Maximal && lcmSc(0) == 0) {
       lcmSc(0) = 1L
     }
 
@@ -508,13 +513,13 @@ abstract class LCMBase(
       i += 1
     }
 
-    if (problem != LCMProblem.Maximal) {
+    if (settings.problem != LCMProblem.Maximal) {
       outWriter.foreach(_.println(s"($lcmTrsactNum)"))
     }
 
-    if (verbose) {
+    if (settings.verbose) {
       println(s"iters=$lcmIters")
-      if (problem == LCMProblem.FreqSet && lcmIters > 0) {
+      if (settings.problem == LCMProblem.FreqSet && lcmIters > 0) {
         printf("compress ratio = %f\n", total.toDouble / lcmIters)
       }
     }

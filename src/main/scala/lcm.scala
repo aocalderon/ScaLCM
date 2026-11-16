@@ -3,33 +3,25 @@ package lcm
 import scala.collection.mutable.ArrayBuffer
 import LCMOps.*
 
-/**
- * Main LCM Miner containing only the core Closed, FreqSet, and Maximal mining algorithms.
- */
-class LCMMiner(
-    problem: LCMProblem,
-    minSup: Int,
-    outputPath: Option[String] = None,
-    verbose: Boolean = false
-) extends LCMBase(problem, minSup, outputPath, verbose) {
+class LCMMiner(settings: Settings) extends LCMBase(settings) {
 
   def run(inputFile: String): Unit = {
     val totalElements = loadDatabase(inputFile)
 
     if (rootTrsact.isEmpty || lcmEend == 0) {
-      if (verbose) println("there is no frequent itemset")
+      if (settings.verbose) println("there is no frequent itemset")
       outputSummary()
       return
     }
 
-    if (verbose) {
+    if (settings.verbose) {
       println(s"shrinked database: #transactions=${rootTrsact.length}, #item=$lcmEend #elements=$totalElements")
     }
 
     initBuffers()
 
     try {
-      problem match {
+      settings.problem match {
         case LCMProblem.Closed  => runClosed()
         case LCMProblem.FreqSet => runFreq()
         case LCMProblem.Maximal => runMaximal()
@@ -39,10 +31,6 @@ class LCMMiner(
       outWriter.foreach(_.close())
     }
   }
-
-  // =========================================================================
-  // 1. LCM CLOSED
-  // =========================================================================
 
   private def runClosed(): Unit = {
     val rootClosure = new ArrayBuffer[Int]()
@@ -93,7 +81,7 @@ class LCMMiner(
     while (i < jump.length) {
       val x = jump(i)
       val f = lcmOfrq(x)
-      if (f >= minSup) {
+      if (f >= settings.minSup) {
         if (f < lcmFrq) {
           survivingJumpBuf += x
           if (x < item) subJumpBuf += x
@@ -165,10 +153,6 @@ class LCMMiner(
     -1
   }
 
-  // =========================================================================
-  // 2. LCM FREQSET
-  // =========================================================================
-
   private def runFreq(): Unit = {
     var i = 0
     while (i < lcmEend) {
@@ -200,7 +184,7 @@ class LCMMiner(
     while (i < jump.length) {
       val x = jump(i)
       val f = lcmOfrq(x)
-      if (f >= minSup) {
+      if (f >= settings.minSup) {
         if (f == lcmFrq) addStack += fastoPerm(x)
         else surviving += x
       }
@@ -250,10 +234,6 @@ class LCMMiner(
     while (addStack.size > savedAddSize) addStack.remove(addStack.size - 1)
   }
 
-  // =========================================================================
-  // 3. LCM MAXIMAL
-  // =========================================================================
-
   private def runMaximal(): Unit = {
     var i = 0
     while (i < lcmEend) {
@@ -287,7 +267,7 @@ class LCMMiner(
     while (i < jump.length) {
       val x = jump(i)
       val f = lcmOfrq(x)
-      if (f >= minSup) {
+      if (f >= settings.minSup) {
         if (f < lcmFrq) {
           survivingJumpBuf += x
           if (x < item) subJumpBuf += x
@@ -391,7 +371,8 @@ object LCM {
     val support    = args(offset + 1).toInt
     val outputFile = if (args.length > offset + 2) Some(args(offset + 2)) else None
 
-    val miner = new LCMMiner(mode, support, outputFile, verbose = false)
+    val settings = Settings(mode, support, outputFile, verbose = false)
+    val miner = new LCMMiner(settings)
     miner.run(inputFile)
   }
 }
