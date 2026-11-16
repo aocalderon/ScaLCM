@@ -2,7 +2,7 @@ package lcm
 
 import java.io.{BufferedReader, BufferedWriter, FileReader, FileWriter, PrintWriter}
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Sorting
+import scala.util.{Sorting, Using}
 
 /**
  * Problem modes corresponding to LCM_FREQSET (1), LCM_CLOSED (2), LCM_MAXIMAL (4) in lcm_var.c
@@ -278,115 +278,74 @@ abstract class LCMBase(val settings: Settings) {
     jump.toArray
   }
 
-  protected def loadDatabase(filename: String): Int = {
-    var counts = new Array[Int](1024)
-    var maxItemSeen = -1
-    var rows = 0
-    var rawElements = 0
-    val lineBuf = new ArrayBuffer[Int](64)
+  protected def loadTransactions(rawTransactionsVector: Vector[ArrayBuffer[Int]]): Int = {
+    lcmTrsactNum = rawTransactionsVector.length
 
-    val reader1 = new BufferedReader(new FileReader(filename), 65536)
-    try {
-      var line = reader1.readLine()
-      while (line != null) {
-        parseLineInts(line, lineBuf)
-        if (lineBuf.nonEmpty) {
-          rows += 1
-          rawElements += lineBuf.length
-          var i = 0
-          while (i < lineBuf.length) {
-            val item = lineBuf(i)
-            if (item >= counts.length) {
-              var newLen = counts.length * 2
-              while (newLen <= item) newLen *= 2
-              val next = new Array[Int](newLen)
-              System.arraycopy(counts, 0, next, 0, counts.length)
-              counts = next
-            }
-            if (item > maxItemSeen) maxItemSeen = item
-            counts(item) += 1
-            i += 1
-          }
-        }
-        line = reader1.readLine()
-      }
-    } finally {
-      reader1.close()
-    }
+    // Computing item frequencies across all transactions functionally...
+    val itemCounts: Map[Int, Int] = rawTransactionsVector.view
+      .flatMap(identity)
+      .groupBy(identity)
+      .view
+      .mapValues(_.size)
+      .toMap
 
-    lcmTrsactNum = rows
     if (settings.verbose) {
+      val maxItemSeen = if (itemCounts.nonEmpty) itemCounts.keys.maxOption.getOrElse(-1) else -1
+      val rawElements = rawTransactionsVector.view.map(_.length).sum
       println(s"database: #transactions=$lcmTrsactNum, #item=${maxItemSeen + 1} #elements=$rawElements")
     }
 
-    val freqItemsBuf = new ArrayBuffer[(Int, Int)]()
-    var itemIdx = 0
-    while (itemIdx <= maxItemSeen) {
-      if (counts(itemIdx) >= settings.minSup) {
-        freqItemsBuf += ((itemIdx, counts(itemIdx)))
+    // Filtering frequent items (>= minSup) and sort descending by frequency, then ascending by item ID...
+    val freqItems: Array[(Int, Int)] = itemCounts
+      .filter(_._2 >= settings.minSup)
+      .toArray
+      .sortWith { case ((item1, freq1), (item2, freq2)) =>
+        if (freq1 != freq2) freq1 > freq2 else item1 < item2
       }
-      itemIdx += 1
-    }
-
-    val freqItems = freqItemsBuf.toArray
-    Sorting.quickSort(freqItems)(using Ordering.by[(Int, Int), (Int, Int)](x => (-x._2, x._1)))
 
     lcmEend = freqItems.length
     fastoPerm = new Array[Int](lcmEend)
 
-    val itemToInternal = new Array[Int](maxItemSeen + 1)
-    java.util.Arrays.fill(itemToInternal, -1)
-    var idx = 0
-    while (idx < lcmEend) {
-      val orig = freqItems(idx)._1
-      fastoPerm(idx) = orig
-      itemToInternal(orig) = idx
-      idx += 1
+    // Building internal mapping lookup table (original item ID -> internal sequence ID)...
+    val itemToInternal = scala.collection.mutable.Map[Int, Int]()
+    freqItems.zipWithIndex.foreach { case ((orig, _), internalIdx) =>
+      fastoPerm(internalIdx) = orig
+      itemToInternal(orig) = internalIdx
     }
 
-    val rawTransactions = new ArrayBuffer[Transaction](rows)
-    val reader2 = new BufferedReader(new FileReader(filename), 65536)
-    try {
-      var line = reader2.readLine()
-      while (line != null) {
-        parseLineInts(line, lineBuf)
-        if (lineBuf.nonEmpty) {
-          var countFreq = 0
-          var i = 0
-          while (i < lineBuf.length) {
-            val orig = lineBuf(i)
-            if (orig <= maxItemSeen && itemToInternal(orig) >= 0) {
-              lineBuf(countFreq) = itemToInternal(orig)
-              countFreq += 1
-            }
-            i += 1
-          }
-          if (countFreq > 0) {
-            val arr = new Array[Int](countFreq)
-            var k = 0
-            while (k < countFreq) {
-              arr(k) = lineBuf(k)
-              k += 1
-            }
-            java.util.Arrays.sort(arr)
-            val dedup = deduplicateSorted(arr)
-            rawTransactions += new Transaction(dedup, 1)
-          }
-        }
-        line = reader2.readLine()
+    // Mapping raw buffers to internal IDs, filter infrequent items, sort, and deduplicate...
+    val mappedTransactions: Array[Transaction] = rawTransactionsVector.view.flatMap { buf =>
+      val mapped = buf.flatMap(itemToInternal.get)
+      if (mapped.nonEmpty) {
+        val sorted = mapped.toArray.sorted
+        val dedup = deduplicateSorted(sorted)
+        Some(new Transaction(dedup, 1))
+      } else {
+        None
       }
-    } finally {
-      reader2.close()
-    }
+    }.toArray
 
-    rootTrsact = shrinkTransactions(rawTransactions.toArray, lcmEend)
-    var elemSum = 0
-    var t = 0
-    while (t < rootTrsact.length) {
-      elemSum += rootTrsact(t).length
-      t += 1
-    }
-    elemSum
+    // Shrinking transactions by merging identical prefixes...
+    rootTrsact = shrinkTransactions(mappedTransactions, lcmEend)
+
+    // Returning total element sum
+    rootTrsact.view.map(_.length).sum
+  }  
+
+  protected def loadDatabase(filename: String): Int = {
+    val rawTransactionsVector: Vector[ArrayBuffer[Int]] = Using
+      .resource(scala.io.Source.fromFile(filename)) { source =>
+        source.getLines()
+          .map { line =>
+            val lineBuf = new ArrayBuffer[Int](64)
+            LCMOps.parseLineInts(line, lineBuf)
+            lineBuf
+          }
+          .filter(_.nonEmpty)
+          .toVector
+      }
+
+    loadTransactions(rawTransactionsVector)
   }
 
   protected def initBuffers(): Unit = {
