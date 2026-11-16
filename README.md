@@ -30,3 +30,38 @@ ScaLCM/
             └── lcm/
                 ├── lcm.scala   # Main algorithm drivers & CLI
                 └── utils.scala # Transactions, base state, and helper operations
+```
+
+## Getting Started Guide
+
+Prerequisites:
+
+- Scala 3 (v3.10.1 or compatible)
+- sbt (v2.x or sbt 1.10+)
+- Java JDK (17 or newer)
+
+1. Run via sbt (Development)
+----------------------------
+
+You can run the miner directly through sbt by passing the mode, input file path, minimum support threshold, and optional output path:
+
+  `sbt "run C path/to/input.dat 1000 /tmp/output.txt"`
+
+2. Build and Run a Fat JAR
+--------------------------
+
+To package the application into a standalone executable JAR:
+
+  `sbt assembly`
+
+Run the compiled fat JAR using Java:
+
+  `java -jar target/out/jvm/scala-3.10.1/scalcm/scalcm.jar C path/to/input.dat 1000 /tmp/output.txt`
+
+CLI Usage:
+
+  `scala lcm.LCM [C|F|M] <input-filename> <support> [output-filename]`
+
+- C : Closed Itemsets
+- F : Frequent Itemsets
+- M : Maximal Itemsets
