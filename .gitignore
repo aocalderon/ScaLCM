@@ -1,0 +1,19 @@
+# sbt and compiled output
+target/
+project/target/
+project/project/
+*.jar
+*.class
+
+# Metals / Bloop / IDE caches
+.bloop/
+project/.bloop/
+.metals/
+.bsp/
+.vscode/
+.idea/
+*.iml
+
+# OS / temporary files
+.DS_Store
+*~
