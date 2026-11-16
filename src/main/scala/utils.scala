@@ -32,35 +32,11 @@ final class Transaction(val items: Array[Int], var weight: Int):
  */
 object LCMOps {
 
-  def parseLineInts(line: String, out: ArrayBuffer[Int]): Unit = {
-    out.clear()
-    val len = line.length
-    var i = 0
-    while (i < len) {
-      var ch = line.charAt(i)
-      while (i < len && (ch < '0' || ch > '9')) {
-        i += 1
-        if (i < len) ch = line.charAt(i)
-      }
-      if (i < len && ch >= '0' && ch <= '9') {
-        var num = 0
-        while (i < len && ch >= '0' && ch <= '9') {
-          num = num * 10 + (ch - '0')
-          i += 1
-          if (i < len) ch = line.charAt(i)
-        }
-        out += num
-      }
-    }
+  def parseInts(line: String): Array[Int] = {
+    line.split(" ").map{ _.toInt }.toArray
   }
 
-  def mkFreqTrsact(
-      T: Array[Transaction],
-      occ: Array[Int],
-      minReqItem: Int,
-      maxKeptItem: Int,
-      mask: Array[Boolean]
-  ): Array[Transaction] = {
+  def mkFreqTrsact(T: Array[Transaction], occ: Array[Int], minReqItem: Int, maxKeptItem: Int, mask: Array[Boolean]): Array[Transaction] = {
     val projected = new ArrayBuffer[Transaction](occ.length)
     val tempBuf   = new ArrayBuffer[Int](64)
     var i = 0
@@ -84,11 +60,7 @@ object LCMOps {
     projected.toArray
   }
 
-  def occDeliver(
-      T: Array[Transaction],
-      maxItem: Int,
-      subJump: Array[Int]
-  ): Array[Array[Int]] = {
+  def occDeliver(T: Array[Transaction], maxItem: Int, subJump: Array[Int]): Array[Array[Int]] = {
     val buckets = Array.fill(subJump.length)(new ArrayBuffer[Int]())
     val itemToPos = new Array[Int](maxItem + 1)
     java.util.Arrays.fill(itemToPos, -1)
@@ -235,7 +207,7 @@ object LCMOps {
 }
 
 /**
- * Base class managing buffers, database loading, frequency counting, and output I/O.
+ * Base class managing buffers, database loading, frequency counting, and output I/O...
  */
 abstract class LCMBase(val settings: Settings) {
   import LCMOps.*
@@ -278,7 +250,7 @@ abstract class LCMBase(val settings: Settings) {
     jump.toArray
   }
 
-  protected def loadTransactions(rawTransactionsVector: Vector[ArrayBuffer[Int]]): Int = {
+  protected def loadTransactions(rawTransactionsVector: Vector[Array[Int]]): Int = {
     lcmTrsactNum = rawTransactionsVector.length
 
     // Computing item frequencies across all transactions functionally...
@@ -333,13 +305,11 @@ abstract class LCMBase(val settings: Settings) {
   }  
 
   protected def loadDatabase(filename: String): Int = {
-    val rawTransactionsVector: Vector[ArrayBuffer[Int]] = Using
+    val rawTransactionsVector: Vector[Array[Int]] = Using
       .resource(scala.io.Source.fromFile(filename)) { source =>
         source.getLines()
           .map { line =>
-            val lineBuf = new ArrayBuffer[Int](64)
-            LCMOps.parseLineInts(line, lineBuf)
-            lineBuf
+            parseInts(line)
           }
           .filter(_.nonEmpty)
           .toVector
