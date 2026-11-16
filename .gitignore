@@ -1,4 +1,6 @@
 # sbt and compiled output
+build.sbt.semanticdb
+project/metals.sbt
 target/
 project/target/
 project/project/

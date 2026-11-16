@@ -28,6 +28,16 @@ final class Transaction(val items: Array[Int], var weight: Int):
   def length: Int = items.length
 
 /**
+ * Itemset representation with the set of items and its support...
+ */
+case class Itemset(items: List[Int], support: Int){
+  override def toString: String = {
+    val itemsStr = items.mkString(" ")
+    s"$itemsStr ($support)"
+  }
+}
+
+/**
  * Stateless helper functions (pure array & transaction operations).
  */
 object LCMOps {
@@ -226,6 +236,8 @@ abstract class LCMBase(val settings: Settings) {
   protected val itemsetStack   = ArrayBuffer.empty[Int]
   protected val addStack       = ArrayBuffer.empty[Int]
   protected val maximalArchive = ArrayBuffer.empty[Set[Int]]
+  // Internal default accumulator for in-memory results
+  val results: ArrayBuffer[Itemset] = ArrayBuffer.empty[Itemset]
 
   protected var rootTrsact: Array[Transaction] = Array.empty
   protected var rootOcc: Array[Array[Int]] = Array.empty
@@ -369,19 +381,14 @@ abstract class LCMBase(val settings: Settings) {
     }
   }
 
-  protected def addItem(origItem: Int): Unit = {
-    itemsetStack += origItem
-  }
+  protected def addItem(origItem: Int): Unit = itemsetStack.append(origItem)
 
-  protected def trimItemsetTo(size: Int): Unit = {
-    while (itemsetStack.size > size) {
-      itemsetStack.remove(itemsetStack.size - 1)
-    }
-  }
+  protected def trimItemsetTo(size: Int): Unit = itemsetStack.dropRightInPlace(itemsetStack.length - size)
 
   protected def recordSolution(): Unit = {
     val k = itemsetStack.size
     lcmSc(k) += 1
+    results += Itemset(itemsetStack.toList, lcmFrq)
     outWriter.foreach(writeCurrentItemset)
   }
 
@@ -410,16 +417,7 @@ abstract class LCMBase(val settings: Settings) {
     }
   }
 
-  private def writeCurrentItemset(w: PrintWriter): Unit = {
-    val sb = new java.lang.StringBuilder(itemsetStack.size * 6 + 10)
-    var i = 0
-    while (i < itemsetStack.size) {
-      sb.append(itemsetStack(i)).append(' ')
-      i += 1
-    }
-    sb.append('(').append(lcmFrq).append(')')
-    w.println(sb.toString)
-  }
+  private def writeCurrentItemset(w: PrintWriter): Unit = { w.println(s"${itemsetStack.mkString(" ")} ($lcmFrq)") }
 
   protected def outputSummary(): Unit = {
     if (settings.problem != LCMProblem.Maximal && lcmSc(0) == 0) {

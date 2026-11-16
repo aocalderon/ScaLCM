@@ -2,6 +2,7 @@ package lcm
 
 import munit.FunSuite
 import java.nio.file.{Files, StandardCopyOption}
+import scala.collection.mutable.ArrayBuffer
 
 class LCMIntegrationTest extends FunSuite {
   test("loadTransactions should correctly parse dataset, apply minSup filter, and build internal transaction structures") {
@@ -25,6 +26,14 @@ class LCMIntegrationTest extends FunSuite {
         Array(1, 3, 5)
     )
     lcm.run(transactions)
+
+    val results: ArrayBuffer[Itemset] = lcm.results
+    val frequents = results.map{ itemset =>
+      (itemset.items.sorted.mkString(" "), itemset.support)
+    }.sortBy(-_._2).map{ case(items, support) =>
+        s"$items ($support)"
+    }.mkString("\n")
+    println(frequents)
 
     // Assertions
     val outPathObj = java.nio.file.Paths.get(outputPath)
